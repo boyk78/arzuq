@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#062443">
+<title>أُرزق - حجوزات تصوير المناسبات</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📷</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#092F57; --navy-dark:#062443; --orange:#F58220; --bg:#F3F6FA; --white:#fff;
+  --gray:#6B7889; --light-orange:#FFF1E5; --border:#E5EAF0; --danger:#C83D3D;
+  color-scheme: light;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;background:var(--navy-dark);font-family:"Cairo",system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;color:var(--navy)}
+button,input{font-family:inherit}
+#app{max-width:480px;height:100%;margin:0 auto;background:var(--bg);display:flex;flex-direction:column;position:relative;overflow:hidden}
+
+/* splash */
+#splash{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:space-between;
+  padding:calc(60px + env(safe-area-inset-top,0px)) 20px calc(50px + env(safe-area-inset-bottom,0px));
+  background:linear-gradient(135deg,#062443 0%,#092F57 50%,#C45E10 100%);color:#fff;transition:opacity .5s}
+#splash.hide{opacity:0;pointer-events:none}
+.sp-center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.sp-name{font-size:56px;font-weight:900;margin:6px 0 0;line-height:1.3}
+.sp-tag{font-size:18px;font-weight:700;margin-top:4px}
+.sp-bottom{text-align:center}
+.sp-bottom p{margin:0}
+.sp-bar{width:90px;height:3px;background:#ffffff33;border-radius:2px;margin:16px auto 0;overflow:hidden}
+.sp-bar i{display:block;height:100%;width:100%;background:var(--orange);transform-origin:right;animation:load 2.2s ease-out forwards}
+@keyframes load{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@media (prefers-reduced-motion:reduce){.sp-bar i{animation:none}}
+
+/* header */
+#hdr{background:var(--navy);padding:calc(12px + env(safe-area-inset-top,0px)) 18px 12px;display:flex;align-items:center;gap:12px;min-height:76px}
+.logo{width:43px;height:43px;border-radius:14px;background:var(--orange);color:#fff;font-size:25px;font-weight:900;display:flex;align-items:center;justify-content:center;flex:none;line-height:1}
+.back{width:40px;height:40px;border-radius:12px;background:#17446C;color:#fff;font-size:30px;border:0;cursor:pointer;line-height:1;flex:none}
+.h-title{flex:1;text-align:right}
+.h-title b{display:block;color:#fff;font-size:20px;font-weight:900;line-height:1.3}
+.h-title span{color:#D6E1EC;font-size:12px}
+
+#main{flex:1;overflow-y:auto;padding:16px;-webkit-overflow-scrolling:touch}
+#main::after{content:"";display:block;height:20px}
+
+/* tabs */
+#tabs{display:flex;background:#fff;border-top:1px solid var(--border);padding-bottom:env(safe-area-inset-bottom,0px)}
+.tab{flex:1;height:68px;border:0;background:none;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--gray);cursor:pointer;position:relative}
+.tab .ic{font-size:24px;font-weight:700;line-height:1.1}
+.tab .tx{font-size:11px;margin-top:2px}
+.tab.on .ic{color:var(--orange)}
+.tab.on .tx{color:var(--navy);font-weight:900}
+.tab.on::before{content:"";position:absolute;top:0;width:25px;height:3px;background:var(--orange);border-radius:0 0 5px 5px}
+
+/* typography blocks */
+.sec{margin:7px 0 13px}
+.sec h2{margin:0;font-size:20px;font-weight:900;color:var(--navy)}
+.sec p{margin:2px 0 0;font-size:13px;color:var(--gray)}
+
+/* hero */
+.hero{background:var(--navy);border-radius:23px;padding:20px;margin-bottom:25px;color:#fff;background-image:linear-gradient(135deg,#092F57,#12407a 60%,#a9520f)}
+.hero-top{display:flex;align-items:center;gap:12px}
+.hero .logo{width:55px;height:55px;border-radius:18px;font-size:32px}
+.hero-brand b{display:block;font-size:27px;font-weight:900;line-height:1.3}
+.hero-brand span{font-size:13px;color:#D5E1EC}
+.hero h1{margin:22px 0 0;font-size:25px;font-weight:900;line-height:1.5}
+.hero p{margin:6px 0 0;font-size:14px;color:#D9E4EE;line-height:1.7}
+
+.btn{display:flex;align-items:center;justify-content:center;width:100%;min-height:52px;border-radius:13px;border:0;background:var(--navy);color:#fff;font-size:15px;font-weight:900;margin-top:10px;cursor:pointer}
+.btn.sec2{background:var(--bg);color:var(--navy);border:1px solid var(--border)}
+.btn.danger{background:var(--danger)}
+.btn.orange{background:var(--orange);width:auto;padding:0 22px;min-height:48px;margin-top:20px}
+.btn:active{opacity:.85}
+
+/* stats / cats */
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:20px}
+.stat{background:#fff;border:1px solid var(--border);border-radius:17px;padding:15px}
+.stat .e{font-size:22px;margin-bottom:8px}
+.stat b{display:block;font-size:18px;font-weight:900}
+.stat span{font-size:12px;color:var(--gray)}
+.cats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
+.cat{background:#fff;border:1px solid var(--border);border-radius:16px;padding:16px 5px;display:flex;flex-direction:column;align-items:center;gap:9px;cursor:pointer;font-size:13px;font-weight:700;color:var(--navy)}
+.cat .ib{width:50px;height:50px;border-radius:15px;background:var(--light-orange);display:flex;align-items:center;justify-content:center;font-size:26px}
+
+/* booking card */
+.empty{background:#fff;border:1px solid var(--border);border-radius:18px;padding:25px;text-align:center;margin:12px 0}
+.empty .e{font-size:35px}
+.empty b{display:block;font-size:17px;font-weight:900;margin-top:8px}
+.empty span{font-size:13px;color:var(--gray)}
+.bk{display:block;width:100%;text-align:right;background:#fff;border:1px solid var(--border);border-radius:18px;padding:15px;margin-bottom:12px;cursor:pointer;color:var(--navy)}
+.bk-top{display:flex;align-items:center;gap:11px}
+.bk-ic{width:46px;height:46px;border-radius:14px;background:var(--light-orange);display:flex;align-items:center;justify-content:center;font-size:23px;flex:none}
+.bk-info{flex:1;min-width:0}
+.bk-info b{display:block;font-size:17px;font-weight:900}
+.bk-info span{font-size:12px;color:var(--gray)}
+.bk-arrow{color:var(--orange);font-size:28px;line-height:1}
+.bk hr{border:0;height:1px;background:var(--border);margin:13px 0}
+.bk-row{display:flex;justify-content:space-between;font-size:12px;color:var(--gray)}
+.bk-money{display:flex;justify-content:space-between;margin-top:14px;background:var(--bg);border-radius:12px;padding:12px}
+.bk-money small{display:block;font-size:11px;color:var(--gray)}
+.bk-money b{font-size:14px;font-weight:900}
+.bk-money .or{color:var(--orange)}
+
+/* form */
+.card{background:#fff;border:1px solid var(--border);border-radius:19px;padding:16px;margin-bottom:13px}
+.card h3{margin:0 0 15px;font-size:17px;font-weight:900}
+.divider{height:1px;background:var(--border);margin:20px 0}
+.fcats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.fcat{border:1px solid var(--border);background:var(--bg);border-radius:13px;padding:12px 4px;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--gray);cursor:pointer}
+.fcat .e{font-size:22px}
+.fcat.on{background:var(--light-orange);border-color:var(--orange);color:var(--navy);font-weight:900}
+.field{margin-bottom:15px}
+.field label,.lbl{display:block;font-size:14px;font-weight:700;margin-bottom:8px}
+.field input{width:100%;min-height:51px;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:0 13px;font-size:15px;color:var(--navy);outline:none}
+.field input:focus,.picker:focus-visible{border-color:var(--orange);box-shadow:0 0 0 3px #F5822026}
+.picker{width:100%;min-height:51px;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:0 13px;display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:600;color:var(--navy);cursor:pointer;margin-bottom:12px}
+.picker i{color:var(--orange);font-style:normal;font-size:20px}
+.dayline{font-size:13px;color:var(--gray);margin:0 0 15px}
+.rem{background:var(--light-orange);border-radius:13px;padding:14px;display:flex;justify-content:space-between;align-items:center}
+.rem span{font-size:14px;font-weight:700}
+.rem b{font-size:17px;font-weight:900;color:var(--orange)}
+[hidden]{display:none!important}
+
+/* calendar */
+.cal{background:#fff;border:1px solid var(--border);border-radius:15px;padding:10px;margin-bottom:15px}
+.cal-h{display:flex;justify-content:space-between;align-items:center;padding:0 8px;margin-bottom:8px}
+.cal-h b{font-size:16px;font-weight:900}
+.cal-h button{background:none;border:0;color:var(--orange);font-size:28px;font-weight:900;cursor:pointer;width:40px;height:36px}
+.cal-g{display:grid;grid-template-columns:repeat(7,1fr)}
+.cal-g span,.cal-g button{height:40px;display:flex;align-items:center;justify-content:center;font-size:14px;border:0;background:none;border-radius:10px;color:var(--navy);cursor:pointer}
+.cal-g span{font-size:11px;font-weight:700;color:var(--gray);cursor:default}
+.cal-g button.sel{background:var(--orange);color:#fff;font-weight:900}
+.cal-g button:disabled{color:#C7CDD5;cursor:default}
+
+/* time picker */
+.tp{background:var(--bg);border-radius:14px;padding:13px;display:flex;align-items:center;justify-content:space-around;margin-bottom:15px}
+.tp-part{display:flex;flex-direction:column;align-items:center}
+.tp-part button{background:none;border:0;color:var(--orange);font-size:22px;font-weight:900;padding:2px 14px;cursor:pointer}
+.tp-part b{font-size:26px;font-weight:900;margin:2px 0}
+.tp-part small{font-size:11px;color:var(--gray)}
+.tp-colon{font-size:26px;font-weight:900}
+.tp-per{display:flex;flex-direction:column;gap:6px}
+.tp-per button{border:0;border-radius:9px;background:#fff;color:var(--gray);padding:8px 12px;font-size:12px;cursor:pointer}
+.tp-per button.on{background:var(--navy);color:#fff;font-weight:900}
+
+/* filters / search */
+.search{width:100%;min-height:51px;background:#fff;border:1px solid var(--border);border-radius:13px;padding:0 14px;font-size:14px;color:var(--navy);margin-bottom:12px;outline:none}
+.search:focus{border-color:var(--orange)}
+.filters{display:flex;gap:8px;overflow-x:auto;padding-bottom:14px}
+.chip{flex:none;border:1px solid var(--border);background:#fff;color:var(--gray);border-radius:20px;padding:9px 15px;font-size:13px;font-weight:600;cursor:pointer}
+.chip.on{background:var(--navy);border-color:var(--navy);color:#fff}
+
+/* detail */
+.d-hero{background:var(--navy);border-radius:20px;padding:23px;text-align:center;color:#fff;margin-bottom:15px}
+.d-hero .ib{width:70px;height:70px;border-radius:23px;background:var(--orange);display:inline-flex;align-items:center;justify-content:center;font-size:35px;margin-bottom:12px}
+.d-hero b{display:block;font-size:23px;font-weight:900}
+.d-hero span{font-size:13px;color:#D7E4EF}
+.drow{min-height:46px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px}
+.drow span{font-size:13px;color:var(--gray)}
+.drow b{font-size:14px;font-weight:700;text-align:left}
+.drem{margin-top:14px;background:var(--light-orange);border-radius:12px;padding:13px;display:flex;justify-content:space-between}
+.drem span{font-size:14px;font-weight:700}
+.drem b{font-size:15px;font-weight:900;color:var(--orange)}
+.loc{font-size:14px;line-height:1.8;margin:0}
+</style>
+</head>
+<body>
+
+<div id="splash" role="status" aria-label="جاري التحميل">
+  <div></div>
+  <div class="sp-center">
+    <div id="spIcon"></div>
+    <div class="sp-name">أُرزق</div>
+    <div class="sp-tag">لحظاتك .. تستحق التوثيق</div>
+  </div>
+  <div class="sp-bottom">
+    <p>مرحباً بك في تطبيق أُرزق</p>
+    <p style="font-size:13px;color:#D5DEEC;margin-top:4px">نسعد بخدمتك</p>
+    <div class="sp-bar"><i></i></div>
+  </div>
+</div>
+
+<div id="app">
+  <header id="hdr"></header>
+  <main id="main"></main>
+  <nav id="tabs"></nav>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ============ البيانات الثابتة ============ */
+  var CATEGORIES = [
+    { id: "quran", title: "ختمة قرآن", icon: "📖" },
+    { id: "slaughter", title: "ذبح", icon: "🐑" },
+    { id: "marriage", title: "عقد قران", icon: "💍" },
+    { id: "opening", title: "افتتاح", icon: "🎉" },
+    { id: "sultana", title: "سلطنة", icon: "👑" },
+    { id: "fadhaniya", title: "فضانية", icon: "🎊" }
+  ];
+  var FAMILY = ["sultana", "marriage", "slaughter"]; // يظهر فيها حقل "أفراح آل"
+  var WEEK_DAYS = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
+  var WEEK_SHORT = ["أحد","اثن","ثلا","أرب","خمي","جمع","سبت"];
+  var MONTHS = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
+  var KEY = "@arzuq_data";
+
+  /* ============ دوال مساعدة ============ */
+  function $(s) { return document.querySelector(s); }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function money(n) { return Number(n || 0).toLocaleString("en-US") + " د.ل"; }
+  function pad(n) { return String(n).padStart(2, "0"); }
+  function formatDate(d) { return pad(d.getDate()) + "/" + pad(d.getMonth() + 1) + "/" + d.getFullYear(); }
+  function parseDate(v) {
+    if (!v) return new Date();
+    var p = v.split("/");
+    if (p.length !== 3) return new Date();
+    var d = new Date(+p[2], +p[1] - 1, +p[0]);
+    return isNaN(d.getTime()) ? new Date() : d;
+  }
+  function getCategory(id) {
+    for (var i = 0; i < CATEGORIES.length; i++) if (CATEGORIES[i].id === id) return CATEGORIES[i];
+    return { id: "other", title: "أخرى", icon: "📷" };
+  }
+  function remaining(b) { return Math.max(Number(b.total || 0) - Number(b.received || 0), 0); }
+  function initialForm(category) {
+    var now = new Date();
+    return {
+      category: category || "", name: "", phone: "", familyName: "", total: "", received: "",
+      location: "", eventDate: formatDate(now), eventDay: WEEK_DAYS[now.getDay()], eventTime: ""
+    };
+  }
+
+  function cameraSvg(size) {
+    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 100 100" aria-hidden="true">' +
+      '<rect x="36" y="14" width="30" height="16" rx="4" fill="#F58220"/>' +
+      '<rect x="8" y="24" width="84" height="62" rx="12" fill="#F58220"/>' +
+      '<circle cx="80" cy="35" r="4" fill="#fff"/>' +
+      '<circle cx="50" cy="55" r="25" fill="#fff"/>' +
+      '<circle cx="50" cy="55" r="21" fill="#092F57"/>' +
+      '<circle cx="50" cy="55" r="14" fill="#173F73"/>' +
+      '<circle cx="50" cy="55" r="8" fill="#F58220"/>' +
+      '<circle cx="41" cy="46" r="3.5" fill="#fff"/></svg>';
+  }
+
+  /* ============ التخزين ============ */
+  var bookings = [];
+  try { bookings = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) { bookings = []; }
+  if (!Array.isArray(bookings)) bookings = [];
+  function persist() { try { localStorage.setItem(KEY, JSON.stringify(bookings)); } catch (e) {} }
+
+  /* ============ الحالة ============ */
+  var screen = "home", form = initialForm(), editingId = null, selectedId = null;
+  var search = "", filter = "all";
+  var cal = { m: 0, y: 0 }, tp = { h: "08", m: "00", p: "مساءً" };
+
+  function selected() { return bookings.filter(function (b) { return b.id === selectedId; })[0]; }
+  function go(s) { screen = s; render(); }
+
+  /* ============ العرض ============ */
+  function headerHtml() {
+    var titles = { home: "الرئيسية", form: editingId ? "تعديل الحجز" : "حجز جديد", bookings: "الحجوزات", detail: "تفاصيل الحجز" };
+    var left = screen === "detail"
+      ? '<button class="back" data-a="go" data-s="bookings" aria-label="رجوع">›</button>'
+      : '<div class="logo">أُ</div>';
+    return left + '<div class="h-title"><b>' + titles[screen] + '</b><span>تطبيق أُرزق</span></div><div class="logo">أُ</div>';
+  }
+
+  function tabsHtml() {
+    var tabs = [["home", "الرئيسية", "⌂"], ["bookings", "الحجوزات", "▤"], ["new", "حجز جديد", "＋"]];
+    return tabs.map(function (t) {
+      var on = screen === t[0] || (t[0] === "bookings" && screen === "detail") || (t[0] === "new" && screen === "form");
+      return '<button class="tab' + (on ? " on" : "") + '" data-a="' + (t[0] === "new" ? "new" : "go") + '" data-s="' + t[0] + '">' +
+        '<span class="ic">' + t[2] + '</span><span class="tx">' + t[1] + "</span></button>";
+    }).join("");
+  }
+
+  function secTitle(t, s) { return '<div class="sec"><h2>' + t + "</h2>" + (s ? "<p>" + s + "</p>" : "") + "</div>"; }
+
+  function bookingCard(b) {
+    var c = getCategory(b.category);
+    var fam = b.familyName ? "  •  أفراح آل " + esc(b.familyName) : "";
+    return '<button class="bk" data-a="open" data-id="' + esc(b.id) + '">' +
+      '<div class="bk-top"><div class="bk-ic">' + c.icon + '</div>' +
+      '<div class="bk-info"><b>' + esc(b.name) + "</b><span>" + c.title + fam + "</span></div>" +
+      '<span class="bk-arrow">‹</span></div><hr>' +
+      '<div class="bk-row"><span>📅 ' + esc(b.eventDate) + "</span><span>🕒 " + esc(b.eventTime || "غير محدد") + "</span></div>" +
+      '<div class="bk-money"><div><small>الإجمالي</small><b>' + money(b.total) + "</b></div>" +
+      '<div><small>المتبقي</small><b class="or">' + money(remaining(b)) + "</b></div></div></button>";
+  }
+
+  function homeView() {
+    var total = 0, received = 0;
+    bookings.forEach(function (b) { total += Number(b.total || 0); received += Number(b.received || 0); });
+    var latest = bookings.slice(0, 3).map(bookingCard).join("");
+    return '<div class="hero"><div class="hero-top"><div class="logo">أُ</div>' +
+      '<div class="hero-brand"><b>أُرزق</b><span>لتنظيم حجوزات مناسباتك</span></div></div>' +
+      "<h1>كل مناسباتك في مكان واحد</h1><p>نظّم حجوزاتك وتابع حساباتك بكل سهولة</p>" +
+      '<button class="btn orange" data-a="new">＋ حجز جديد</button></div>' +
+      secTitle("ملخص الحجوزات", "نظرة سريعة على حساباتك") +
+      '<div class="stats">' +
+      '<div class="stat"><div class="e">📋</div><b>' + bookings.length + "</b><span>إجمالي الحجوزات</span></div>" +
+      '<div class="stat"><div class="e">💰</div><b>' + money(total) + "</b><span>إجمالي المبالغ</span></div>" +
+      '<div class="stat"><div class="e">✅</div><b>' + money(received) + "</b><span>المبالغ المستلمة</span></div>" +
+      '<div class="stat"><div class="e">⏳</div><b>' + money(total - received) + "</b><span>المبالغ المتبقية</span></div></div>" +
+      secTitle("أقسام المناسبات", "اختر نوع المناسبة لإضافة حجز") +
+      '<div class="cats">' + CATEGORIES.map(function (c) {
+        return '<button class="cat" data-a="new" data-c="' + c.id + '"><span class="ib">' + c.icon + "</span>" + c.title + "</button>";
+      }).join("") + "</div>" +
+      secTitle("أحدث الحجوزات", "آخر الحجوزات التي تمت إضافتها") +
+      (latest || '<div class="empty"><div class="e">📅</div><b>لا توجد حجوزات حتى الآن</b><span>أضف أول حجز ليظهر هنا</span></div>');
+  }
+
+  function field(label, key, ph, type, mode, id) {
+    return '<div class="field"' + (id ? ' id="' + id + '"' : "") + '><label>' + label + "</label>" +
+      '<input data-f="' + key + '" type="' + (type || "text") + '"' + (mode ? ' inputmode="' + mode + '"' : "") +
+      ' placeholder="' + ph + '" value="' + esc(form[key]) + '" autocomplete="off"></div>';
+  }
+
+  function formView() {
+    return secTitle(editingId ? "تعديل الحجز" : "إضافة حجز جديد", "أدخل بيانات المناسبة والزبون") +
+      '<div class="card"><h3>نوع المناسبة</h3><div class="fcats" id="fcats">' +
+      CATEGORIES.map(function (c) {
+        return '<button type="button" class="fcat' + (form.category === c.id ? " on" : "") + '" data-a="pickCat" data-c="' + c.id + '"><span class="e">' + c.icon + "</span>" + c.title + "</button>";
+      }).join("") + "</div>" +
+      '<div class="divider"></div><h3>بيانات الزبون</h3>' +
+      field("اسم الزبون", "name", "أدخل اسم الزبون") +
+      field("رقم الهاتف", "phone", "09xxxxxxxx", "tel", "tel") +
+      field("أفراح آل", "familyName", "اكتب باقي الاسم (مثال: الفيتوري)", "text", "", "familyWrap") +
+      '<div class="divider"></div><h3>تفاصيل المناسبة</h3>' +
+      '<span class="lbl">تاريخ المناسبة</span>' +
+      '<button type="button" class="picker" data-a="toggleCal"><span id="dateText">📅  ' + esc(form.eventDate) + "</span><i>⌄</i></button>" +
+      '<div id="calBox" hidden></div>' +
+      '<p class="dayline" id="dayText">اليوم: ' + esc(form.eventDay) + "</p>" +
+      '<span class="lbl">وقت المناسبة</span>' +
+      '<button type="button" class="picker" data-a="toggleTime"><span id="timeText">🕒  ' + esc(form.eventTime || "اختر وقت المناسبة") + "</span><i>⌄</i></button>" +
+      '<div id="timeBox" hidden></div>' +
+      '<div class="divider"></div><h3>الحسابات المالية</h3>' +
+      field("المبلغ الإجمالي", "total", "مثال: 500", "text", "decimal") +
+      field("المبلغ المستلم", "received", "مثال: 200", "text", "decimal") +
+      '<div class="rem"><span>المبلغ المتبقي</span><b id="rem">' + money(Math.max((+form.total || 0) - (+form.received || 0), 0)) + "</b></div>" +
+      '<div class="divider"></div><h3>📍 موقع المناسبة</h3>' +
+      field("عنوان أو اسم المكان", "location", "أدخل عنوان أو اسم المكان") +
+      '<button type="button" class="btn sec2" style="margin-top:0" data-a="mapForm">🗺️ فتح الخريطة للتحقق من الموقع</button>' +
+      '<button type="button" class="btn" data-a="save">' + (editingId ? "حفظ التعديلات" : "حفظ الحجز") + "</button>" +
+      '<button type="button" class="btn sec2" data-a="cancel">إلغاء</button></div>';
+  }
+
+  function listHtml() {
+    var q = search.trim().toLowerCase();
+    var list = bookings.filter(function (b) {
+      var okS = !q || (b.name || "").toLowerCase().indexOf(q) > -1 || (b.phone || "").indexOf(q) > -1 ||
+        getCategory(b.category).title.indexOf(q) > -1 || (b.familyName || "").toLowerCase().indexOf(q) > -1;
+      return okS && (filter === "all" || b.category === filter);
+    });
+    if (!list.length) {
+      return '<div class="empty"><div class="e">🔎</div><b>لا توجد نتائج</b><span>جرّب تغيير كلمات البحث أو نوع المناسبة</span></div>';
+    }
+    return list.map(bookingCard).join("");
+  }
+
+  function bookingsView() {
+    return secTitle("جميع الحجوزات", "لديك " + bookings.length + " حجز") +
+      '<input id="q" class="search" type="search" placeholder="ابحث بالاسم أو الهاتف أو المناسبة..." value="' + esc(search) + '">' +
+      '<div class="filters"><button class="chip' + (filter === "all" ? " on" : "") + '" data-a="filter" data-c="all">الكل</button>' +
+      CATEGORIES.map(function (c) {
+        return '<button class="chip' + (filter === c.id ? " on" : "") + '" data-a="filter" data-c="' + c.id + '">' + c.title + "</button>";
+      }).join("") + '</div><div id="list">' + listHtml() + "</div>";
+  }
+
+  function drow(l, v) { return '<div class="drow"><span>' + l + "</span><b>" + esc(v || "غير محدد") + "</b></div>"; }
+
+  function detailView() {
+    var b = selected();
+    if (!b) { screen = "bookings"; return bookingsView(); }
+    var c = getCategory(b.category);
+    return '<div class="d-hero"><div class="ib">' + c.icon + "</div><b>" + esc(b.name) + "</b><span>" + c.title + "</span></div>" +
+      '<div class="card"><h3>معلومات الزبون والمناسبة</h3>' +
+      drow("اسم الزبون", b.name) + drow("رقم الهاتف", b.phone) +
+      (b.familyName ? drow("أفراح", "آل " + b.familyName) : "") +
+      drow("نوع المناسبة", c.title) + drow("تاريخ المناسبة", b.eventDate) +
+      drow("يوم المناسبة", b.eventDay) + drow("وقت المناسبة", b.eventTime) + "</div>" +
+      '<div class="card"><h3>التفاصيل المالية</h3>' +
+      drow("المبلغ الإجمالي", money(b.total)) + drow("المبلغ المستلم", money(b.received)) +
+      '<div class="drem"><span>المبلغ المتبقي</span><b>' + money(remaining(b)) + "</b></div></div>" +
+      '<div class="card"><h3>📍 موقع المناسبة</h3><p class="loc">' + esc(b.location || "لم يتم تحديد الموقع") + "</p>" +
+      '<button class="btn sec2" data-a="mapDetail">🗺️ فتح الموقع في الخرائط</button></div>' +
+      '<button class="btn" data-a="edit">تعديل بيانات الحجز</button>' +
+      '<button class="btn danger" data-a="del">حذف الحجز</button>';
+  }
+
+  function render() {
+    $("#hdr").innerHTML = headerHtml();
+    var views = { home: homeView, form: formView, bookings: bookingsView, detail: detailView };
+    var m = $("#main");
+    m.innerHTML = views[screen]();
+    m.scrollTop = 0;
+    $("#tabs").innerHTML = tabsHtml();
+    if (screen === "form") {
+      $("#familyWrap").hidden = FAMILY.indexOf(form.category) < 0;
+      var t = (form.eventTime || "").match(/(\d+):(\d+)\s*(صباحاً|مساءً)/);
+      if (t) tp = { h: t[1], m: t[2], p: t[3] };
+    }
+  }
+
+  /* ============ التقويم واختيار الوقت ============ */
+  function drawCal() {
+    var first = new Date(cal.y, cal.m, 1).getDay();
+    var days = new Date(cal.y, cal.m + 1, 0).getDate();
+    var sel = parseDate(form.eventDate);
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var h = '<div class="cal"><div class="cal-h"><button type="button" data-a="calNav" data-d="1" aria-label="الشهر التالي">›</button>' +
+      "<b>" + MONTHS[cal.m] + " " + cal.y + '</b><button type="button" data-a="calNav" data-d="-1" aria-label="الشهر السابق">‹</button></div><div class="cal-g">';
+    WEEK_SHORT.forEach(function (w) { h += "<span>" + w + "</span>"; });
+    for (var i = 0; i < first; i++) h += "<span></span>";
+    for (var d = 1; d <= days; d++) {
+      var dt = new Date(cal.y, cal.m, d);
+      var isSel = sel.getDate() === d && sel.getMonth() === cal.m && sel.getFullYear() === cal.y;
+      h += '<button type="button" data-a="calPick" data-v="' + formatDate(dt) + '"' + (dt < today ? " disabled" : "") +
+        (isSel ? ' class="sel"' : "") + ">" + d + "</button>";
+    }
+    $("#calBox").innerHTML = h + "</div></div>";
+  }
+
+  function drawTp() {
+    $("#timeBox").innerHTML = '<div class="tp">' +
+      '<div class="tp-part"><button type="button" data-a="tpH" data-d="1">＋</button><b>' + tp.h + '</b><button type="button" data-a="tpH" data-d="-1">－</button><small>الساعة</small></div>' +
+      '<span class="tp-colon">:</span>' +
+      '<div class="tp-part"><button type="button" data-a="tpM" data-d="1">＋</button><b>' + tp.m + '</b><button type="button" data-a="tpM" data-d="-1">－</button><small>الدقيقة</small></div>' +
+      '<div class="tp-per">' + ["صباحاً", "مساءً"].map(function (p) {
+        return '<button type="button" data-a="tpP" data-v="' + p + '"' + (tp.p === p ? ' class="on"' : "") + ">" + p + "</button>";
+      }).join("") + "</div></div>";
+  }
+
+  function applyTime() {
+    form.eventTime = tp.h + ":" + tp.m + " " + tp.p;
+    $("#timeText").textContent = "🕒  " + form.eventTime;
+    drawTp();
+  }
+
+  function updateRemaining() {
+    var r = $("#rem");
+    if (r) r.textContent = money(Math.max((+form.total || 0) - (+form.received || 0), 0));
+  }
+
+  /* ============ الحفظ والتحقق ============ */
+  function validate() {
+    if (!form.category) return "يرجى اختيار نوع المناسبة";
+    if (!form.name.trim()) return "يرجى إدخال اسم الزبون";
+    if (!form.phone.trim()) return "يرجى إدخال رقم الهاتف";
+    if (!form.total || Number(form.total) <= 0) return "يرجى إدخال المبلغ الإجمالي";
+    if (Number(form.received || 0) > Number(form.total)) return "المبلغ المدفوع لا يمكن أن يكون أكبر من الإجمالي";
+    if (!form.eventDate) return "يرجى اختيار تاريخ المناسبة";
+    return "";
+  }
+
+  function save() {
+    var err = validate();
+    if (err) { alert(err); return; }
+    var old = editingId ? bookings.filter(function (b) { return b.id === editingId; })[0] : null;
+    var b = {
+      category: form.category, name: form.name.trim(), phone: form.phone.trim(),
+      familyName: FAMILY.indexOf(form.category) > -1 ? (form.familyName || "").trim() : "",
+      location: form.location.trim(), eventDate: form.eventDate, eventDay: form.eventDay, eventTime: form.eventTime,
+      id: editingId || String(Date.now()),
+      total: Number(form.total), received: Number(form.received || 0),
+      createdAt: old && old.createdAt ? old.createdAt : new Date().toISOString()
+    };
+    if (editingId) bookings = bookings.map(function (x) { return x.id === editingId ? b : x; });
+    else bookings.unshift(b);
+    persist();
+    editingId = null; form = initialForm();
+    go("bookings");
+  }
+
+  function openMap(loc) {
+    if (!loc || !loc.trim()) { alert("لا يوجد موقع مسجل لهذا الحجز"); return; }
+    window.open("https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(loc.trim()), "_blank", "noopener");
+  }
+
+  /* ============ الأحداث ============ */
+  var actions = {
+    go: function (t) { go(t.dataset.s); },
+    new: function (t) { editingId = null; form = initialForm(t.dataset.c || ""); go("form"); },
+    open: function (t) { selectedId = t.dataset.id; go("detail"); },
+    filter: function (t) { filter = t.dataset.c; render(); },
+    pickCat: function (t) {
+      form.category = t.dataset.c;
+      document.querySelectorAll("#fcats .fcat").forEach(function (el) { el.classList.toggle("on", el.dataset.c === form.category); });
+      $("#familyWrap").hidden = FAMILY.indexOf(form.category) < 0;
+    },
+    toggleCal: function () {
+      var box = $("#calBox");
+      if (box.hidden) {
+        var d = parseDate(form.eventDate); cal = { m: d.getMonth(), y: d.getFullYear() };
+        drawCal(); box.hidden = false; $("#timeBox").hidden = true;
+      } else box.hidden = true;
+    },
+    calNav: function (t) {
+      cal.m += Number(t.dataset.d);
+      if (cal.m > 11) { cal.m = 0; cal.y++; }
+      if (cal.m < 0) { cal.m = 11; cal.y--; }
+      drawCal();
+    },
+    calPick: function (t) {
+      form.eventDate = t.dataset.v;
+      form.eventDay = WEEK_DAYS[parseDate(form.eventDate).getDay()];
+      $("#dateText").textContent = "📅  " + form.eventDate;
+      $("#dayText").textContent = "اليوم: " + form.eventDay;
+      $("#calBox").hidden = true;
+    },
+    toggleTime: function () {
+      var box = $("#timeBox");
+      if (box.hidden) { drawTp(); box.hidden = false; $("#calBox").hidden = true; } else box.hidden = true;
+    },
+    tpH: function (t) { var n = Number(tp.h) + Number(t.dataset.d); if (n > 12) n = 1; if (n < 1) n = 12; tp.h = pad(n); applyTime(); },
+    tpM: function (t) { var n = Number(tp.m) + Number(t.dataset.d) * 5; if (n > 55) n = 0; if (n < 0) n = 55; tp.m = pad(n); applyTime(); },
+    tpP: function (t) { tp.p = t.dataset.v; applyTime(); },
+    save: save,
+    cancel: function () { editingId = null; go("home"); },
+    mapForm: function () { openMap(form.location); },
+    mapDetail: function () { var b = selected(); if (b) openMap(b.location); },
+    edit: function () {
+      var b = selected(); if (!b) return;
+      editingId = b.id;
+      form = {
+        category: b.category || "", name: b.name || "", phone: b.phone || "", familyName: b.familyName || "",
+        total: String(b.total || ""), received: String(b.received || ""), location: b.location || "",
+        eventDate: b.eventDate || formatDate(new Date()),
+        eventDay: b.eventDay || WEEK_DAYS[parseDate(b.eventDate).getDay()], eventTime: b.eventTime || ""
+      };
+      go("form");
+    },
+    del: function () {
+      var b = selected(); if (!b) return;
+      if (confirm("هل أنت متأكد من حذف هذا الحجز؟")) {
+        bookings = bookings.filter(function (x) { return x.id !== b.id; });
+        persist(); selectedId = null; go("bookings");
+      }
+    }
+  };
+
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest("[data-a]");
+    if (t && actions[t.dataset.a]) actions[t.dataset.a](t);
+  });
+
+  document.addEventListener("input", function (e) {
+    var t = e.target;
+    if (t.dataset && t.dataset.f) {
+      var k = t.dataset.f, v = t.value;
+      if (k === "total" || k === "received") {
+        var c = v.replace(/[^0-9.]/g, "");
+        if (c !== v) t.value = c;
+        v = c;
+      }
+      form[k] = v;
+      if (k === "total" || k === "received") updateRemaining();
+    } else if (t.id === "q") {
+      search = t.value;
+      $("#list").innerHTML = listHtml();
+    }
+  });
+
+  /* ============ التشغيل ============ */
+  $("#spIcon").innerHTML = cameraSvg(110);
+  render();
+  setTimeout(function () {
+    var s = $("#splash");
+    s.classList.add("hide");
+    setTimeout(function () { s.remove(); }, 600);
+  }, 2400);
+})();
+</script>
+</body>
+</html>
