@@ -1,0 +1,957 @@
+import React, { useEffect, useState } from "react";
+import {
+  SafeAreaView, StatusBar, View, Text as RNText, TextInput as RNTextInput,
+  TouchableOpacity, ScrollView, StyleSheet, Alert as NativeAlert,
+  KeyboardAvoidingView, Platform, Linking,
+} from "react-native";
+
+// ============ التنبيهات ============
+const Alert = {
+  alert(title, message, buttons) {
+    if (Platform.OS !== "web") return NativeAlert.alert(title, message, buttons);
+    const text = message ? title + "\n" + message : title;
+    if (buttons && buttons.length > 1) {
+      const action = buttons.find((b) => b.style !== "cancel");
+      if (window.confirm(text) && action?.onPress) action.onPress();
+    } else window.alert(text);
+  },
+};
+
+// ============ التخزين ============
+let AsyncStorage = null;
+try { AsyncStorage = require("@react-native-async-storage/async-storage").default; } catch (e) {}
+
+// ============ الأيقونات (اختياري) ============
+let MCI = null;
+try { MCI = require("@expo/vector-icons").MaterialCommunityIcons; } catch (e) {}
+
+function Icon({ name, size = 24, color = "#FFFFFF", fallback = "📷" }) {
+  if (MCI) return <MCI name={name} size={size} color={color} />;
+  return <RNText style={{ fontSize: size * 0.9 }}>{fallback}</RNText>;
+}
+
+// ============ التدرج اللوني (اختياري) ============
+let LinearGradient = null;
+try { LinearGradient = require("expo-linear-gradient").LinearGradient; } catch (e) {}
+
+function Gradient({ colors, style, children }) {
+  if (LinearGradient) {
+    return (
+      <LinearGradient colors={colors} style={style} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+        {children}
+      </LinearGradient>
+    );
+  }
+  return <View style={[style, { backgroundColor: colors[1] || colors[0] }]}>{children}</View>;
+}
+
+// ============ الخط (Cairo) مع بديل تلقائي ============
+let useCairo = null, CairoMap = null;
+try {
+  const c = require("@expo-google-fonts/cairo");
+  useCairo = c.useFonts;
+  CairoMap = {
+    Cairo_400Regular: c.Cairo_400Regular,
+    Cairo_600SemiBold: c.Cairo_600SemiBold,
+    Cairo_700Bold: c.Cairo_700Bold,
+    Cairo_900Black: c.Cairo_900Black,
+  };
+} catch (e) {}
+let FONT_ON = false;
+
+function withFont(style) {
+  const f = StyleSheet.flatten(style) || {};
+  if (!FONT_ON) return f;
+  const w = String(f.fontWeight || "400");
+  const family =
+    w === "900" ? "Cairo_900Black" :
+    w === "800" || w === "700" ? "Cairo_700Bold" :
+    w === "600" ? "Cairo_600SemiBold" : "Cairo_400Regular";
+  return { ...f, fontFamily: family, fontWeight: "normal" };
+}
+function Text({ style, ...rest }) { return <RNText {...rest} style={withFont(style)} />; }
+function TextInput({ style, ...rest }) { return <RNTextInput {...rest} style={withFont(style)} />; }
+
+// ============ الألوان ============
+const NAVY = "#092F57";
+const NAVY_DARK = "#062443";
+const ORANGE = "#F58220";
+const BG = "#F3F6FA";
+const WHITE = "#FFFFFF";
+const GRAY = "#6B7889";
+const LIGHT_ORANGE = "#FFF1E5";
+const BORDER = "#E5EAF0";
+const STORAGE_KEY = "@arzuq_data";
+
+// ============ أنواع المناسبات (تم حذف "مناسبات أخرى") ============
+const CATEGORIES = [
+  { id: "quran", title: "ختمة قرآن", icon: "📖" },
+  { id: "slaughter", title: "ذبح", icon: "🐑" },
+  { id: "marriage", title: "عقد قران", icon: "💍" },
+  { id: "opening", title: "افتتاح", icon: "🎉" },
+  { id: "sultana", title: "سلطنة", icon: "👑" },
+  { id: "fadhaniya", title: "فضانية", icon: "🎊" },
+];
+
+// المناسبات التي يظهر فيها حقل "أفراح آل ..."
+const FAMILY_CATEGORIES = ["sultana", "marriage", "slaughter"];
+
+const WEEK_DAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+const WEEK_SHORT = ["أحد", "اثن", "ثلا", "أرب", "خمي", "جمع", "سبت"];
+const MONTHS = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
+
+// ============ دوال مساعدة ============
+const money = (n) => Number(n || 0).toLocaleString("en-US") + " د.ل";
+
+function formatDate(date) {
+  return String(date.getDate()).padStart(2, "0") + "/" +
+    String(date.getMonth() + 1).padStart(2, "0") + "/" + date.getFullYear();
+}
+function parseDate(value) {
+  if (!value) return new Date();
+  const parts = value.split("/");
+  if (parts.length !== 3) return new Date();
+  const [day, month, year] = parts.map(Number);
+  const date = new Date(year, month - 1, day);
+  return isNaN(date.getTime()) ? new Date() : date;
+}
+// الحجوزات القديمة التي نوعها "other" تظهر باسم "أخرى"
+function getCategory(id) {
+  return CATEGORIES.find((i) => i.id === id) || { id: "other", title: "أخرى", icon: "📷" };
+}
+function getRemaining(b) {
+  return Math.max(Number(b.total || 0) - Number(b.received || 0), 0);
+}
+function getInitialForm() {
+  return {
+    category: "", name: "", phone: "", familyName: "", total: "", received: "", location: "",
+    eventDate: formatDate(new Date()), eventDay: WEEK_DAYS[new Date().getDay()], eventTime: "",
+  };
+}
+
+// ============ مكونات صغيرة ============
+function SectionTitle({ title, subtitle }) {
+  return (
+    <View style={styles.sectionTitleContainer}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {subtitle ? <Text style={styles.sectionSubtitle}>{subtitle}</Text> : null}
+    </View>
+  );
+}
+
+function Field({ label, value, onChangeText, placeholder, keyboardType = "default", multiline = false }) {
+  return (
+    <View style={styles.fieldContainer}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <TextInput
+        style={[styles.input, multiline && styles.multilineInput]}
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor="#A0A9B5"
+        keyboardType={keyboardType}
+        multiline={multiline}
+        textAlign="right"
+      />
+    </View>
+  );
+}
+
+function Button({ title, onPress, secondary = false, danger = false }) {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.85}
+      onPress={onPress}
+      style={[styles.button, secondary && styles.secondaryButton, danger && styles.dangerButton]}
+    >
+      <Text style={[styles.buttonText, secondary && styles.secondaryButtonText]}>{title}</Text>
+    </TouchableOpacity>
+  );
+}
+
+function DetailRow({ label, value }) {
+  return (
+    <View style={styles.detailRow}>
+      <Text style={styles.detailValue}>{value || "غير محدد"}</Text>
+      <Text style={styles.detailLabel}>{label}</Text>
+    </View>
+  );
+}
+
+// ============ التقويم ============
+function Calendar({ selected, onSelect }) {
+  const [month, setMonth] = useState(parseDate(selected).getMonth());
+  const [year, setYear] = useState(parseDate(selected).getFullYear());
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const selectedDate = parseDate(selected);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  function changeMonth(direction) {
+    let m = month + direction, y = year;
+    if (m > 11) { m = 0; y++; }
+    if (m < 0) { m = 11; y--; }
+    setMonth(m); setYear(y);
+  }
+
+  return (
+    <View style={styles.calendarContainer}>
+      <View style={styles.calendarHeader}>
+        <TouchableOpacity onPress={() => changeMonth(-1)}><Text style={styles.calendarArrow}>‹</Text></TouchableOpacity>
+        <Text style={styles.calendarMonth}>{MONTHS[month]} {year}</Text>
+        <TouchableOpacity onPress={() => changeMonth(1)}><Text style={styles.calendarArrow}>›</Text></TouchableOpacity>
+      </View>
+
+      <View style={styles.calendarGrid}>
+        {WEEK_SHORT.map((d, i) => (
+          <View key={i} style={styles.calendarCell}><Text style={styles.calendarWeekText}>{d}</Text></View>
+        ))}
+        {Array.from({ length: firstDay }).map((_, i) => <View key={"e" + i} style={styles.calendarCell} />)}
+        {Array.from({ length: daysInMonth }).map((_, i) => {
+          const day = i + 1;
+          const date = new Date(year, month, day);
+          date.setHours(0, 0, 0, 0);
+          const isPast = date < today;
+          const isSelected = selectedDate.getDate() === day && selectedDate.getMonth() === month && selectedDate.getFullYear() === year;
+          return (
+            <TouchableOpacity
+              key={day}
+              disabled={isPast}
+              onPress={() => onSelect(formatDate(date))}
+              style={[styles.calendarCell, isSelected && styles.calendarSelected]}
+            >
+              <Text style={[styles.calendarDay, isSelected && styles.calendarSelectedText, isPast && styles.calendarPastText]}>{day}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+// ============ اختيار الوقت ============
+function TimePicker({ value, onChange }) {
+  const [hour, setHour] = useState("08");
+  const [minute, setMinute] = useState("00");
+  const [period, setPeriod] = useState("مساءً");
+
+  useEffect(() => {
+    if (value) {
+      const m = value.match(/(\d+):(\d+)\s*(صباحاً|مساءً)/);
+      if (m) { setHour(m[1]); setMinute(m[2]); setPeriod(m[3]); }
+    }
+  }, [value]);
+
+  const update = (h, m, p) => onChange(`${h}:${m} ${p}`);
+
+  function changeHour(dir) {
+    let n = Number(hour) + dir;
+    if (n > 12) n = 1;
+    if (n < 1) n = 12;
+    const v = String(n).padStart(2, "0");
+    setHour(v); update(v, minute, period);
+  }
+  function changeMinute(dir) {
+    let n = Number(minute) + dir * 5;
+    if (n > 55) n = 0;
+    if (n < 0) n = 55;
+    const v = String(n).padStart(2, "0");
+    setMinute(v); update(hour, v, period);
+  }
+  function changePeriod(p) { setPeriod(p); update(hour, minute, p); }
+
+  return (
+    <View style={styles.timeContainer}>
+      <View style={styles.timePart}>
+        <TouchableOpacity onPress={() => changeHour(1)}><Text style={styles.timeArrow}>＋</Text></TouchableOpacity>
+        <Text style={styles.timeNumber}>{hour}</Text>
+        <TouchableOpacity onPress={() => changeHour(-1)}><Text style={styles.timeArrow}>－</Text></TouchableOpacity>
+        <Text style={styles.timeLabel}>الساعة</Text>
+      </View>
+
+      <Text style={styles.timeColon}>:</Text>
+
+      <View style={styles.timePart}>
+        <TouchableOpacity onPress={() => changeMinute(1)}><Text style={styles.timeArrow}>＋</Text></TouchableOpacity>
+        <Text style={styles.timeNumber}>{minute}</Text>
+        <TouchableOpacity onPress={() => changeMinute(-1)}><Text style={styles.timeArrow}>－</Text></TouchableOpacity>
+        <Text style={styles.timeLabel}>الدقيقة</Text>
+      </View>
+
+      <View style={styles.periodContainer}>
+        {["صباحاً", "مساءً"].map((item) => (
+          <TouchableOpacity key={item} onPress={() => changePeriod(item)}
+            style={[styles.periodButton, period === item && styles.periodActive]}>
+            <Text style={[styles.periodText, period === item && styles.periodActiveText]}>{item}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// ============ بطاقة الحجز ============
+function BookingCard({ booking, onPress }) {
+  const category = getCategory(booking.category);
+  return (
+    <TouchableOpacity activeOpacity={0.85} onPress={onPress} style={styles.bookingCard}>
+      <View style={styles.bookingTop}>
+        <View style={styles.bookingIcon}><Text style={styles.bookingEmoji}>{category.icon}</Text></View>
+        <View style={styles.bookingInfo}>
+          <Text style={styles.bookingName}>{booking.name}</Text>
+          <Text style={styles.bookingCategory}>{category.title}{booking.familyName ? "  •  أفراح آل " + booking.familyName : ""}</Text>
+        </View>
+        <Text style={styles.bookingArrow}>‹</Text>
+      </View>
+
+      <View style={styles.bookingDivider} />
+
+      <View style={styles.bookingBottom}>
+        <Text style={styles.bookingDate}>📅 {booking.eventDate}</Text>
+        <Text style={styles.bookingTime}>🕒 {booking.eventTime || "غير محدد"}</Text>
+      </View>
+
+      <View style={styles.bookingMoney}>
+        <View>
+          <Text style={styles.moneyLabel}>الإجمالي</Text>
+          <Text style={styles.moneyValue}>{money(booking.total)}</Text>
+        </View>
+        <View>
+          <Text style={styles.moneyLabel}>المتبقي</Text>
+          <Text style={styles.remainingValue}>{money(getRemaining(booking))}</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+// ============ التطبيق ============
+export default function App() {
+  const [fontsLoaded] = useCairo ? useCairo(CairoMap) : [true];
+  FONT_ON = !!useCairo && !!fontsLoaded;
+
+  const [splash, setSplash] = useState(true);
+  const [screen, setScreen] = useState("home");
+  const [bookings, setBookings] = useState([]);
+  const [form, setForm] = useState(getInitialForm());
+  const [editingId, setEditingId] = useState(null);
+  const [selectedBooking, setSelectedBooking] = useState(null);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [calendarVisible, setCalendarVisible] = useState(false);
+  const [timeVisible, setTimeVisible] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  // شاشة البداية: تظهر ثانيتين ثم تفتح الرئيسية
+  useEffect(() => {
+    const t = setTimeout(() => setSplash(false), 2400);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        if (AsyncStorage) {
+          const saved = await AsyncStorage.getItem(STORAGE_KEY);
+          if (saved) setBookings(JSON.parse(saved));
+        }
+      } catch (e) { console.log("Storage error:", e); }
+      setLoaded(true);
+    }
+    load();
+  }, []);
+
+  useEffect(() => {
+    async function save() {
+      if (!loaded || !AsyncStorage) return;
+      try { await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(bookings)); }
+      catch (e) { console.log("Save error:", e); }
+    }
+    save();
+  }, [bookings, loaded]);
+
+  const updateForm = (key, value) => setForm((p) => ({ ...p, [key]: value }));
+
+  function openNewBooking(category = "") {
+    setEditingId(null);
+    setForm({ ...getInitialForm(), category });
+    setCalendarVisible(false);
+    setTimeVisible(false);
+    setScreen("form");
+  }
+
+  function editBooking(b) {
+    setEditingId(b.id);
+    setForm({
+      category: b.category || "", name: b.name || "", phone: b.phone || "", familyName: b.familyName || "",
+      total: String(b.total || ""), received: String(b.received || ""),
+      location: b.location || "",
+      eventDate: b.eventDate || formatDate(new Date()),
+      eventDay: b.eventDay || WEEK_DAYS[parseDate(b.eventDate).getDay()],
+      eventTime: b.eventTime || "",
+    });
+    setSelectedBooking(b);
+    setScreen("form");
+  }
+
+  function validateForm() {
+    if (!form.category) { Alert.alert("تنبيه", "يرجى اختيار نوع المناسبة"); return false; }
+    if (!form.name.trim()) { Alert.alert("تنبيه", "يرجى إدخال اسم الزبون"); return false; }
+    if (!form.phone.trim()) { Alert.alert("تنبيه", "يرجى إدخال رقم الهاتف"); return false; }
+    if (!form.total || Number(form.total) <= 0) { Alert.alert("تنبيه", "يرجى إدخال المبلغ الإجمالي"); return false; }
+    if (Number(form.received || 0) < 0) { Alert.alert("تنبيه", "المبلغ المدفوع غير صحيح"); return false; }
+    if (Number(form.received || 0) > Number(form.total)) {
+      Alert.alert("تنبيه", "المبلغ المدفوع لا يمكن أن يكون أكبر من الإجمالي"); return false;
+    }
+    if (!form.eventDate) { Alert.alert("تنبيه", "يرجى اختيار تاريخ المناسبة"); return false; }
+    return true;
+  }
+
+  function saveBooking() {
+    if (!validateForm()) return;
+    const booking = {
+      ...form,
+      familyName: FAMILY_CATEGORIES.includes(form.category) ? (form.familyName || "").trim() : "",
+      id: editingId || String(Date.now()),
+      total: Number(form.total),
+      received: Number(form.received || 0),
+      createdAt: editingId ? selectedBooking?.createdAt || new Date().toISOString() : new Date().toISOString(),
+    };
+    if (editingId) {
+      setBookings((p) => p.map((i) => (i.id === editingId ? booking : i)));
+      Alert.alert("تم التعديل", "تم تحديث بيانات الحجز بنجاح");
+    } else {
+      setBookings((p) => [booking, ...p]);
+      Alert.alert("تم الحفظ", "تمت إضافة الحجز بنجاح");
+    }
+    setForm(getInitialForm());
+    setEditingId(null);
+    setScreen("bookings");
+  }
+
+  function deleteBooking(id) {
+    Alert.alert("حذف الحجز", "هل أنت متأكد من حذف هذا الحجز؟", [
+      { text: "إلغاء", style: "cancel" },
+      {
+        text: "حذف", style: "destructive",
+        onPress: () => {
+          setBookings((p) => p.filter((i) => i.id !== id));
+          setSelectedBooking(null);
+          setScreen("bookings");
+        },
+      },
+    ]);
+  }
+
+  function openBooking(b) { setSelectedBooking(b); setScreen("detail"); }
+
+  function openLocation(location) {
+    if (!location || !location.trim()) { Alert.alert("تنبيه", "لا يوجد موقع مسجل لهذا الحجز"); return; }
+    const q = encodeURIComponent(location.trim());
+    const url = Platform.OS === "ios"
+      ? `https://maps.apple.com/?q=${q}`
+      : `https://www.google.com/maps/search/?api=1&query=${q}`;
+    Linking.openURL(url).catch(() => Alert.alert("خطأ", "تعذر فتح الخرائط"));
+  }
+
+  const filteredBookings = bookings.filter((b) => {
+    const q = search.trim().toLowerCase();
+    const okSearch = !q || b.name?.toLowerCase().includes(q) || b.phone?.includes(q) || getCategory(b.category).title.includes(q);
+    const okFilter = filter === "all" || b.category === filter;
+    return okSearch && okFilter;
+  });
+
+  const totalBookings = bookings.length;
+  const totalMoney = bookings.reduce((s, i) => s + Number(i.total || 0), 0);
+  const receivedMoney = bookings.reduce((s, i) => s + Number(i.received || 0), 0);
+  const remainingMoney = totalMoney - receivedMoney;
+
+  // ملاحظة: الدوال التالية تُستدعى كدوال عادية (وليس <Component />)
+  // حتى لا تُعاد بناء الشاشة مع كل حرف ويُغلق الكيبورد.
+
+  function renderHeader(title, back = false) {
+    return (
+      <View style={styles.header}>
+        {back ? (
+          <TouchableOpacity onPress={() => setScreen("bookings")} style={styles.headerBack}>
+            <Text style={styles.headerBackText}>›</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.headerLogo}><Text style={styles.headerLogoText}>أُ</Text></View>
+        )}
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>{title}</Text>
+          <Text style={styles.headerSubtitle}>تطبيق أُرزق</Text>
+        </View>
+        <View style={styles.headerLogo}><Text style={styles.headerLogoText}>أُ</Text></View>
+      </View>
+    );
+  }
+
+  function renderHome() {
+    return (
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.pageContent}>
+        <View style={styles.hero}>
+          <View style={styles.heroTop}>
+            <View style={styles.heroLogo}><Text style={styles.heroLogoText}>أُ</Text></View>
+            <View style={styles.heroBrand}>
+              <Text style={styles.heroBrandName}>أُرزق</Text>
+              <Text style={styles.heroBrandCaption}>لتنظيم حجوزات مناسباتك</Text>
+            </View>
+          </View>
+          <Text style={styles.heroTitle}>كل مناسباتك في مكان واحد</Text>
+          <Text style={styles.heroDescription}>نظّم حجوزاتك وتابع حساباتك بكل سهولة</Text>
+          <TouchableOpacity style={styles.heroButton} onPress={() => openNewBooking()}>
+            <Text style={styles.heroButtonText}>＋ حجز جديد</Text>
+          </TouchableOpacity>
+        </View>
+
+        <SectionTitle title="ملخص الحجوزات" subtitle="نظرة سريعة على حساباتك" />
+        <View style={styles.statsGrid}>
+          <View style={styles.statCard}>
+            <Text style={styles.statIcon}>📋</Text>
+            <Text style={styles.statNumber}>{totalBookings}</Text>
+            <Text style={styles.statLabel}>إجمالي الحجوزات</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statIcon}>💰</Text>
+            <Text style={styles.statNumber}>{money(totalMoney)}</Text>
+            <Text style={styles.statLabel}>إجمالي المبالغ</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statIcon}>✅</Text>
+            <Text style={styles.statNumber}>{money(receivedMoney)}</Text>
+            <Text style={styles.statLabel}>المبالغ المستلمة</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statIcon}>⏳</Text>
+            <Text style={styles.statNumber}>{money(remainingMoney)}</Text>
+            <Text style={styles.statLabel}>المبالغ المتبقية</Text>
+          </View>
+        </View>
+
+        <SectionTitle title="أقسام المناسبات" subtitle="اختر نوع المناسبة لإضافة حجز" />
+        <View style={styles.categoriesGrid}>
+          {CATEGORIES.map((c) => (
+            <TouchableOpacity key={c.id} style={styles.categoryCard} onPress={() => openNewBooking(c.id)} activeOpacity={0.8}>
+              <View style={styles.categoryIconBox}><Text style={styles.categoryIcon}>{c.icon}</Text></View>
+              <Text style={styles.categoryTitle}>{c.title}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <SectionTitle title="أحدث الحجوزات" subtitle="آخر الحجوزات التي تمت إضافتها" />
+        {bookings.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyIcon}>📅</Text>
+            <Text style={styles.emptyTitle}>لا توجد حجوزات حتى الآن</Text>
+            <Text style={styles.emptyText}>أضف أول حجز ليظهر هنا</Text>
+          </View>
+        ) : (
+          bookings.slice(0, 3).map((b) => <BookingCard key={b.id} booking={b} onPress={() => openBooking(b)} />)
+        )}
+        <View style={{ height: 20 }} />
+      </ScrollView>
+    );
+  }
+
+  function renderForm() {
+    return (
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.pageContent} keyboardShouldPersistTaps="handled">
+          <SectionTitle title={editingId ? "تعديل الحجز" : "إضافة حجز جديد"} subtitle="أدخل بيانات المناسبة والزبون" />
+
+          <View style={styles.formCard}>
+            <Text style={styles.formSectionTitle}>نوع المناسبة</Text>
+            <View style={styles.formCategories}>
+              {CATEGORIES.map((c) => (
+                <TouchableOpacity key={c.id} onPress={() => updateForm("category", c.id)}
+                  style={[styles.formCategory, form.category === c.id && styles.formCategoryActive]}>
+                  <Text style={styles.formCategoryIcon}>{c.icon}</Text>
+                  <Text style={[styles.formCategoryText, form.category === c.id && styles.formCategoryTextActive]}>{c.title}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.formDivider} />
+
+            {/* بيانات الزبون (بدون الموقع) */}
+            <Text style={styles.formSectionTitle}>بيانات الزبون</Text>
+            <Field label="اسم الزبون" value={form.name} onChangeText={(v) => updateForm("name", v)} placeholder="أدخل اسم الزبون" />
+            <Field label="رقم الهاتف" value={form.phone} onChangeText={(v) => updateForm("phone", v)} placeholder="09xxxxxxxx" keyboardType="phone-pad" />
+            {FAMILY_CATEGORIES.includes(form.category) && (
+              <Field label="أفراح آل" value={form.familyName} onChangeText={(v) => updateForm("familyName", v)} placeholder="اكتب باقي الاسم (مثال: الفيتوري)" />
+            )}
+
+            <View style={styles.formDivider} />
+
+            <Text style={styles.formSectionTitle}>تفاصيل المناسبة</Text>
+
+            <Text style={styles.fieldLabel}>تاريخ المناسبة</Text>
+            <TouchableOpacity style={styles.pickerButton} onPress={() => setCalendarVisible(!calendarVisible)}>
+              <Text style={styles.pickerButtonText}>📅  {form.eventDate}</Text>
+              <Text style={styles.pickerArrow}>{calendarVisible ? "⌃" : "⌄"}</Text>
+            </TouchableOpacity>
+
+            {calendarVisible && (
+              <Calendar
+                selected={form.eventDate}
+                onSelect={(value) => {
+                  setForm((p) => ({ ...p, eventDate: value, eventDay: WEEK_DAYS[parseDate(value).getDay()] }));
+                  setCalendarVisible(false);
+                }}
+              />
+            )}
+
+            <Text style={styles.eventDayText}>اليوم: {form.eventDay}</Text>
+
+            <Text style={styles.fieldLabel}>وقت المناسبة</Text>
+            <TouchableOpacity style={styles.pickerButton} onPress={() => setTimeVisible(!timeVisible)}>
+              <Text style={styles.pickerButtonText}>🕒  {form.eventTime || "اختر وقت المناسبة"}</Text>
+              <Text style={styles.pickerArrow}>{timeVisible ? "⌃" : "⌄"}</Text>
+            </TouchableOpacity>
+            {timeVisible && <TimePicker value={form.eventTime} onChange={(v) => updateForm("eventTime", v)} />}
+
+            <View style={styles.formDivider} />
+
+            <Text style={styles.formSectionTitle}>الحسابات المالية</Text>
+            <Field label="المبلغ الإجمالي" value={form.total} onChangeText={(v) => updateForm("total", v.replace(/[^0-9.]/g, ""))} placeholder="مثال: 500" keyboardType="numeric" />
+            <Field label="المبلغ المستلم" value={form.received} onChangeText={(v) => updateForm("received", v.replace(/[^0-9.]/g, ""))} placeholder="مثال: 200" keyboardType="numeric" />
+
+            <View style={styles.remainingBox}>
+              <Text style={styles.remainingBoxLabel}>المبلغ المتبقي</Text>
+              <Text style={styles.remainingBoxValue}>
+                {money(Math.max(Number(form.total || 0) - Number(form.received || 0), 0))}
+              </Text>
+            </View>
+
+            <View style={styles.formDivider} />
+
+            {/* الموقع في آخر النموذج */}
+            <Text style={styles.formSectionTitle}>📍 موقع المناسبة</Text>
+            <Field label="عنوان أو اسم المكان" value={form.location} onChangeText={(v) => updateForm("location", v)} placeholder="أدخل عنوان أو اسم المكان" />
+            <Button title="🗺️ فتح الخريطة للتحقق من الموقع" secondary onPress={() => openLocation(form.location)} />
+
+            <Button title={editingId ? "حفظ التعديلات" : "حفظ الحجز"} onPress={saveBooking} />
+            <Button title="إلغاء" secondary onPress={() => { setEditingId(null); setScreen("home"); }} />
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  function renderBookings() {
+    return (
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.pageContent} keyboardShouldPersistTaps="handled">
+        <SectionTitle title="جميع الحجوزات" subtitle={`لديك ${bookings.length} حجز`} />
+
+        <TextInput
+          style={styles.searchInput}
+          value={search}
+          onChangeText={setSearch}
+          placeholder="ابحث بالاسم أو الهاتف أو المناسبة..."
+          placeholderTextColor="#A0A9B5"
+          textAlign="right"
+        />
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersContainer}>
+          <TouchableOpacity onPress={() => setFilter("all")} style={[styles.filterButton, filter === "all" && styles.filterActive]}>
+            <Text style={[styles.filterText, filter === "all" && styles.filterTextActive]}>الكل</Text>
+          </TouchableOpacity>
+          {CATEGORIES.map((c) => (
+            <TouchableOpacity key={c.id} onPress={() => setFilter(c.id)} style={[styles.filterButton, filter === c.id && styles.filterActive]}>
+              <Text style={[styles.filterText, filter === c.id && styles.filterTextActive]}>{c.title}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {filteredBookings.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyIcon}>🔎</Text>
+            <Text style={styles.emptyTitle}>لا توجد نتائج</Text>
+            <Text style={styles.emptyText}>جرّب تغيير كلمات البحث أو نوع المناسبة</Text>
+          </View>
+        ) : (
+          filteredBookings.map((b) => <BookingCard key={b.id} booking={b} onPress={() => openBooking(b)} />)
+        )}
+        <View style={{ height: 20 }} />
+      </ScrollView>
+    );
+  }
+
+  function renderDetail() {
+    if (!selectedBooking) return null;
+    const b = selectedBooking;
+    const category = getCategory(b.category);
+
+    return (
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.pageContent}>
+        <View style={styles.detailHero}>
+          <View style={styles.detailHeroIcon}><Text style={styles.detailHeroEmoji}>{category.icon}</Text></View>
+          <Text style={styles.detailHeroName}>{b.name}</Text>
+          <Text style={styles.detailHeroCategory}>{category.title}</Text>
+        </View>
+
+        <View style={styles.detailCard}>
+          <Text style={styles.formSectionTitle}>معلومات الزبون والمناسبة</Text>
+          <DetailRow label="اسم الزبون" value={b.name} />
+          <DetailRow label="رقم الهاتف" value={b.phone} />
+          {b.familyName ? <DetailRow label="أفراح" value={"آل " + b.familyName} /> : null}
+          <DetailRow label="نوع المناسبة" value={category.title} />
+          <DetailRow label="تاريخ المناسبة" value={b.eventDate} />
+          <DetailRow label="يوم المناسبة" value={b.eventDay} />
+          <DetailRow label="وقت المناسبة" value={b.eventTime} />
+        </View>
+
+        <View style={styles.detailCard}>
+          <Text style={styles.formSectionTitle}>التفاصيل المالية</Text>
+          <DetailRow label="المبلغ الإجمالي" value={money(b.total)} />
+          <DetailRow label="المبلغ المستلم" value={money(b.received)} />
+          <View style={styles.detailRemaining}>
+            <Text style={styles.detailRemainingLabel}>المبلغ المتبقي</Text>
+            <Text style={styles.detailRemainingValue}>{money(getRemaining(b))}</Text>
+          </View>
+        </View>
+
+        {/* الموقع في آخر التفاصيل */}
+        <View style={styles.detailCard}>
+          <Text style={styles.formSectionTitle}>📍 موقع المناسبة</Text>
+          <Text style={styles.locationText}>{b.location || "لم يتم تحديد الموقع"}</Text>
+          <Button title="🗺️ فتح الموقع في الخرائط" secondary onPress={() => openLocation(b.location)} />
+        </View>
+
+        <Button title="تعديل بيانات الحجز" onPress={() => editBooking(b)} />
+        <Button title="حذف الحجز" danger onPress={() => deleteBooking(b.id)} />
+        <View style={{ height: 20 }} />
+      </ScrollView>
+    );
+  }
+
+  function renderTabs() {
+    const tabs = [
+      { id: "home", title: "الرئيسية", icon: "⌂" },
+      { id: "bookings", title: "الحجوزات", icon: "▤" },
+      { id: "form", title: "حجز جديد", icon: "＋" },
+    ];
+    return (
+      <View style={styles.bottomTabs}>
+        {tabs.map((tab) => {
+          const active = screen === tab.id || (tab.id === "bookings" && screen === "detail");
+          return (
+            <TouchableOpacity key={tab.id} style={styles.tabButton}
+              onPress={() => (tab.id === "form" ? openNewBooking() : setScreen(tab.id))}>
+              <Text style={[styles.tabIcon, active && styles.tabActive]}>{tab.icon}</Text>
+              <Text style={[styles.tabText, active && styles.tabTextActive]}>{tab.title}</Text>
+              {active && <View style={styles.tabIndicator} />}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    );
+  }
+
+  let pageTitle = "الرئيسية";
+  if (screen === "form") pageTitle = editingId ? "تعديل الحجز" : "حجز جديد";
+  if (screen === "bookings") pageTitle = "الحجوزات";
+  if (screen === "detail") pageTitle = "تفاصيل الحجز";
+
+  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: NAVY_DARK }} />;
+
+  if (splash) {
+    return (
+      <Gradient colors={[NAVY_DARK, NAVY, "#C45E10"]} style={styles.splash}>
+        <StatusBar barStyle="light-content" backgroundColor={NAVY_DARK} />
+        <View style={styles.splashCenter}>
+          <Icon name="camera-iris" size={110} color={ORANGE} fallback="📷" />
+          <Text style={styles.splashName}>أُرزق</Text>
+          <Text style={styles.splashTag}>لحظاتك .. تستحق التوثيق</Text>
+        </View>
+        <View style={styles.splashBottom}>
+          <Text style={styles.splashWelcome}>مرحباً بك في تطبيق أُرزق</Text>
+          <Text style={styles.splashSub}>نسعد بخدمتك</Text>
+          <View style={styles.splashBar}><View style={styles.splashBarFill} /></View>
+        </View>
+      </Gradient>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="light-content" backgroundColor={NAVY_DARK} />
+      <View style={styles.appContainer}>
+        {renderHeader(pageTitle, screen === "detail")}
+        <View style={styles.screenContainer}>
+          {screen === "home" && renderHome()}
+          {screen === "form" && renderForm()}
+          {screen === "bookings" && renderBookings()}
+          {screen === "detail" && renderDetail()}
+        </View>
+        {renderTabs()}
+      </View>
+    </SafeAreaView>
+  );
+}
+
+// ============ التنسيقات ============
+const styles = StyleSheet.create({
+  splash: { flex: 1, alignItems: "center", justifyContent: "space-between", paddingVertical: 60 },
+  splashCenter: { flex: 1, alignItems: "center", justifyContent: "center" },
+  splashLogoBox: { width: 110, height: 110, borderRadius: 34, backgroundColor: ORANGE, alignItems: "center", justifyContent: "center" },
+  splashLogoLetter: { color: WHITE, fontSize: 70, fontWeight: "900", lineHeight: 100 },
+  splashName: { color: WHITE, fontSize: 56, fontWeight: "900", marginTop: 10 },
+  splashTag: { color: WHITE, fontSize: 18, fontWeight: "700", marginTop: 6 },
+  splashBottom: { alignItems: "center", width: "100%" },
+  splashWelcome: { color: WHITE, fontSize: 15 },
+  splashSub: { color: "#D5DEEC", fontSize: 13, marginTop: 4 },
+  splashBar: { width: 90, height: 3, backgroundColor: "#FFFFFF33", borderRadius: 2, marginTop: 16 },
+  splashBarFill: { width: 45, height: 3, backgroundColor: ORANGE, borderRadius: 2 },
+
+  safeArea: { flex: 1, backgroundColor: NAVY_DARK },
+  appContainer: { flex: 1, backgroundColor: BG },
+  screenContainer: { flex: 1 },
+
+  header: { minHeight: 76, backgroundColor: NAVY, paddingHorizontal: 18, paddingVertical: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  headerLogo: { width: 43, height: 43, borderRadius: 14, backgroundColor: ORANGE, alignItems: "center", justifyContent: "center" },
+  headerLogoText: { color: WHITE, fontSize: 25, fontWeight: "900" },
+  headerTitleContainer: { flex: 1, alignItems: "flex-end", marginRight: 12 },
+  headerTitle: { color: WHITE, fontSize: 20, fontWeight: "900" },
+  headerSubtitle: { color: "#D6E1EC", fontSize: 12, marginTop: 2 },
+  headerBack: { width: 40, height: 40, borderRadius: 12, backgroundColor: "#17446C", alignItems: "center", justifyContent: "center" },
+  headerBackText: { color: WHITE, fontSize: 32, lineHeight: 36 },
+
+  pageContent: { padding: 16, paddingBottom: 25 },
+
+  hero: { backgroundColor: NAVY, borderRadius: 23, padding: 20, marginBottom: 25, overflow: "hidden" },
+  heroTop: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end" },
+  heroLogo: { width: 55, height: 55, borderRadius: 18, backgroundColor: ORANGE, alignItems: "center", justifyContent: "center" },
+  heroLogoText: { color: WHITE, fontSize: 32, fontWeight: "900" },
+  heroBrand: { alignItems: "flex-end", marginRight: 12 },
+  heroBrandName: { color: WHITE, fontSize: 27, fontWeight: "900" },
+  heroBrandCaption: { color: "#D5E1EC", fontSize: 13, marginTop: 2 },
+  heroTitle: { color: WHITE, fontSize: 25, fontWeight: "900", textAlign: "right", marginTop: 25, lineHeight: 38 },
+  heroDescription: { color: "#D9E4EE", fontSize: 14, textAlign: "right", marginTop: 6, lineHeight: 24 },
+  heroButton: { backgroundColor: ORANGE, borderRadius: 13, paddingVertical: 14, paddingHorizontal: 20, alignSelf: "flex-end", marginTop: 22 },
+  heroButtonText: { color: WHITE, fontSize: 16, fontWeight: "900" },
+
+  sectionTitleContainer: { marginBottom: 13, marginTop: 7, alignItems: "flex-end" },
+  sectionTitle: { color: NAVY, fontSize: 20, fontWeight: "900" },
+  sectionSubtitle: { color: GRAY, fontSize: 13, marginTop: 2 },
+
+  statsGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginBottom: 20 },
+  statCard: { width: "48%", backgroundColor: WHITE, borderRadius: 17, padding: 15, marginBottom: 11, alignItems: "flex-end", borderWidth: 1, borderColor: BORDER },
+  statIcon: { fontSize: 22, marginBottom: 9 },
+  statNumber: { color: NAVY, fontSize: 18, fontWeight: "900" },
+  statLabel: { color: GRAY, fontSize: 12, marginTop: 3 },
+
+  categoriesGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginBottom: 20 },
+  categoryCard: { width: "31.5%", backgroundColor: WHITE, borderRadius: 16, borderWidth: 1, borderColor: BORDER, alignItems: "center", justifyContent: "center", paddingVertical: 17, paddingHorizontal: 5, marginBottom: 10 },
+  categoryIconBox: { width: 50, height: 50, borderRadius: 15, backgroundColor: LIGHT_ORANGE, alignItems: "center", justifyContent: "center", marginBottom: 9 },
+  categoryIcon: { fontSize: 26 },
+  categoryTitle: { color: NAVY, fontSize: 13, fontWeight: "700", textAlign: "center" },
+
+  emptyBox: { backgroundColor: WHITE, borderRadius: 18, padding: 25, alignItems: "center", marginVertical: 12, borderWidth: 1, borderColor: BORDER },
+  emptyIcon: { fontSize: 35, marginBottom: 12 },
+  emptyTitle: { color: NAVY, fontSize: 17, fontWeight: "900" },
+  emptyText: { color: GRAY, fontSize: 13, marginTop: 5, textAlign: "center" },
+
+  bookingCard: { backgroundColor: WHITE, borderRadius: 18, padding: 15, marginBottom: 12, borderWidth: 1, borderColor: BORDER },
+  bookingTop: { flexDirection: "row", alignItems: "center" },
+  bookingIcon: { width: 46, height: 46, borderRadius: 14, backgroundColor: LIGHT_ORANGE, alignItems: "center", justifyContent: "center" },
+  bookingEmoji: { fontSize: 23 },
+  bookingInfo: { flex: 1, alignItems: "flex-end", marginRight: 11 },
+  bookingName: { color: NAVY, fontSize: 17, fontWeight: "900" },
+  bookingCategory: { color: GRAY, fontSize: 12, marginTop: 2 },
+  bookingArrow: { color: ORANGE, fontSize: 28, marginLeft: 8 },
+  bookingDivider: { height: 1, backgroundColor: BORDER, marginVertical: 13 },
+  bookingBottom: { flexDirection: "row", justifyContent: "space-between" },
+  bookingDate: { color: GRAY, fontSize: 12 },
+  bookingTime: { color: GRAY, fontSize: 12 },
+  bookingMoney: { flexDirection: "row", justifyContent: "space-between", marginTop: 15, backgroundColor: BG, borderRadius: 12, padding: 12 },
+  moneyLabel: { color: GRAY, fontSize: 11, textAlign: "right" },
+  moneyValue: { color: NAVY, fontSize: 14, fontWeight: "900", marginTop: 3 },
+  remainingValue: { color: ORANGE, fontSize: 14, fontWeight: "900", marginTop: 3 },
+
+  formCard: { backgroundColor: WHITE, borderRadius: 19, padding: 16, borderWidth: 1, borderColor: BORDER },
+  formSectionTitle: { color: NAVY, fontSize: 17, fontWeight: "900", textAlign: "right", marginBottom: 15 },
+  formCategories: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
+  formCategory: { width: "31.5%", borderRadius: 13, backgroundColor: BG, paddingVertical: 12, alignItems: "center", marginBottom: 9, borderWidth: 1, borderColor: BORDER },
+  formCategoryActive: { backgroundColor: LIGHT_ORANGE, borderColor: ORANGE },
+  formCategoryIcon: { fontSize: 22, marginBottom: 4 },
+  formCategoryText: { color: GRAY, fontSize: 12, fontWeight: "600" },
+  formCategoryTextActive: { color: NAVY, fontWeight: "900" },
+  formDivider: { height: 1, backgroundColor: BORDER, marginVertical: 20 },
+
+  fieldContainer: { marginBottom: 15 },
+  fieldLabel: { color: NAVY, fontSize: 14, fontWeight: "700", textAlign: "right", marginBottom: 8 },
+  input: { minHeight: 51, backgroundColor: BG, borderWidth: 1, borderColor: BORDER, borderRadius: 12, paddingHorizontal: 13, color: NAVY, fontSize: 15 },
+  multilineInput: { minHeight: 85, textAlignVertical: "top", paddingTop: 12 },
+
+  pickerButton: { minHeight: 51, backgroundColor: BG, borderWidth: 1, borderColor: BORDER, borderRadius: 12, paddingHorizontal: 13, flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  pickerButtonText: { color: NAVY, fontSize: 14, fontWeight: "600" },
+  pickerArrow: { color: ORANGE, fontSize: 20 },
+  eventDayText: { color: GRAY, fontSize: 13, textAlign: "right", marginBottom: 15 },
+
+  calendarContainer: { backgroundColor: WHITE, borderRadius: 15, padding: 10, borderWidth: 1, borderColor: BORDER, marginBottom: 15 },
+  calendarHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 12, marginBottom: 10 },
+  calendarArrow: { color: ORANGE, fontSize: 28, fontWeight: "900" },
+  calendarMonth: { color: NAVY, fontSize: 16, fontWeight: "900" },
+  calendarGrid: { flexDirection: "row", flexWrap: "wrap" },
+  calendarCell: { width: "14.2857%", height: 40, alignItems: "center", justifyContent: "center", borderRadius: 10 },
+  calendarWeekText: { color: GRAY, fontSize: 11, fontWeight: "700" },
+  calendarDay: { color: NAVY, fontSize: 14 },
+  calendarSelected: { backgroundColor: ORANGE },
+  calendarSelectedText: { color: WHITE, fontWeight: "900" },
+  calendarPastText: { color: "#C7CDD5" },
+
+  timeContainer: { backgroundColor: BG, borderRadius: 14, padding: 13, flexDirection: "row", alignItems: "center", justifyContent: "space-around", marginBottom: 15 },
+  timePart: { alignItems: "center" },
+  timeArrow: { color: ORANGE, fontSize: 21, fontWeight: "900", paddingHorizontal: 12 },
+  timeNumber: { color: NAVY, fontSize: 26, fontWeight: "900", marginVertical: 5 },
+  timeLabel: { color: GRAY, fontSize: 11 },
+  timeColon: { color: NAVY, fontSize: 26, fontWeight: "900" },
+  periodContainer: { alignItems: "center" },
+  periodButton: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 9, backgroundColor: WHITE, marginVertical: 3 },
+  periodActive: { backgroundColor: NAVY },
+  periodText: { color: GRAY, fontSize: 12 },
+  periodActiveText: { color: WHITE, fontWeight: "900" },
+
+  remainingBox: { backgroundColor: LIGHT_ORANGE, borderRadius: 13, padding: 14, marginBottom: 4, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  remainingBoxLabel: { color: NAVY, fontSize: 14, fontWeight: "700" },
+  remainingBoxValue: { color: ORANGE, fontSize: 17, fontWeight: "900" },
+
+  button: { minHeight: 52, backgroundColor: NAVY, borderRadius: 13, alignItems: "center", justifyContent: "center", marginTop: 10 },
+  buttonText: { color: WHITE, fontSize: 15, fontWeight: "900" },
+  secondaryButton: { backgroundColor: BG, borderWidth: 1, borderColor: BORDER },
+  secondaryButtonText: { color: NAVY },
+  dangerButton: { backgroundColor: "#C83D3D" },
+
+  searchInput: { minHeight: 51, backgroundColor: WHITE, borderRadius: 13, borderWidth: 1, borderColor: BORDER, paddingHorizontal: 14, color: NAVY, fontSize: 14, marginBottom: 12 },
+  filtersContainer: { paddingBottom: 14 },
+  filterButton: { backgroundColor: WHITE, borderRadius: 20, borderWidth: 1, borderColor: BORDER, paddingHorizontal: 15, paddingVertical: 9, marginRight: 8 },
+  filterActive: { backgroundColor: NAVY, borderColor: NAVY },
+  filterText: { color: GRAY, fontSize: 13, fontWeight: "600" },
+  filterTextActive: { color: WHITE },
+
+  detailHero: { backgroundColor: NAVY, borderRadius: 20, padding: 23, alignItems: "center", marginBottom: 15 },
+  detailHeroIcon: { width: 70, height: 70, borderRadius: 23, backgroundColor: ORANGE, alignItems: "center", justifyContent: "center", marginBottom: 13 },
+  detailHeroEmoji: { fontSize: 35 },
+  detailHeroName: { color: WHITE, fontSize: 23, fontWeight: "900" },
+  detailHeroCategory: { color: "#D7E4EF", fontSize: 13, marginTop: 4 },
+  detailCard: { backgroundColor: WHITE, borderRadius: 17, padding: 16, marginBottom: 13, borderWidth: 1, borderColor: BORDER },
+  detailRow: { minHeight: 46, borderBottomWidth: 1, borderBottomColor: BORDER, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  detailLabel: { color: GRAY, fontSize: 13 },
+  detailValue: { color: NAVY, fontSize: 14, fontWeight: "700", flexShrink: 1, marginLeft: 12 },
+  detailRemaining: { marginTop: 14, backgroundColor: LIGHT_ORANGE, borderRadius: 12, padding: 13, flexDirection: "row", justifyContent: "space-between" },
+  detailRemainingLabel: { color: NAVY, fontSize: 14, fontWeight: "700" },
+  detailRemainingValue: { color: ORANGE, fontSize: 15, fontWeight: "900" },
+  locationText: { color: NAVY, fontSize: 14, textAlign: "right", lineHeight: 24 },
+
+  bottomTabs: { height: 70, backgroundColor: WHITE, borderTopWidth: 1, borderTopColor: BORDER, flexDirection: "row", justifyContent: "space-around", alignItems: "center", paddingBottom: 5 },
+  tabButton: { flex: 1, alignItems: "center", justifyContent: "center", height: "100%", position: "relative" },
+  tabIcon: { color: GRAY, fontSize: 24, fontWeight: "700" },
+  tabActive: { color: ORANGE },
+  tabText: { color: GRAY, fontSize: 11, marginTop: 2 },
+  tabTextActive: { color: NAVY, fontWeight: "900" },
+  tabIndicator: { position: "absolute", top: 0, width: 25, height: 3, backgroundColor: ORANGE, borderBottomLeftRadius: 5, borderBottomRightRadius: 5 },
+});
